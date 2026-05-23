@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>3D轴向拉压杆 | 胡克定律模拟实验</title>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Segoe UI', 'Roboto', 'Microsoft YaHei', sans-serif;
+            background: #071a2b;
+        }
+        .top-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 68%;
+            z-index: 1;
+        }
+        .control-dashboard {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 32%;
+            background: rgba(15, 28, 45, 0.95);
+            backdrop-filter: blur(20px);
+            border-top: 1px solid rgba(90, 180, 255, 0.4);
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            padding: 14px 22px;
+            box-shadow: 0 -10px 30px rgba(0,0,0,0.4);
+            color: #eef4ff;
+            font-size: 14px;
+            overflow-y: auto;
+        }
+        .dashboard-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 24px;
+            justify-content: space-between;
+            width: 100%;
+        }
+        .params-panel {
+            flex: 2;
+            min-width: 260px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 14px 22px;
+        }
+        .info-panel {
+            flex: 1.2;
+            min-width: 240px;
+            background: rgba(0, 0, 0, 0.35);
+            border-radius: 20px;
+            padding: 12px 18px;
+            border-left: 4px solid #4fb8ff;
+        }
+        .param-card {
+            background: rgba(255,255,255,0.06);
+            border-radius: 16px;
+            padding: 10px 14px;
+            transition: all 0.2s ease;
+            border: 1px solid transparent;
+        }
+        .param-card:hover{
+            background: rgba(255,255,255,0.09);
+            border-color: rgba(79,184,255,0.3);
+        }
+        .param-label {
+            display: flex;
+            justify-content: space-between;
+            font-weight: 500;
+            margin-bottom: 8px;
+            font-size: 0.88rem;
+        }
+        input[type="range"] {
+            width: 100%;
+            cursor: pointer;
+            background: #243b57;
+            height: 5px;
+            border-radius: 6px;
+            -webkit-appearance: none;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #4fb8ff;
+            border: none;
+            box-shadow: 0 0 6px #74c7ff;
+            cursor: pointer;
+            transition: 0.15s;
+        }
+        input[type="range"]::-webkit-slider-thumb:hover{
+            transform: scale(1.1);
+        }
+        .value-input {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+            align-items: center;
+        }
+        .value-input input {
+            width: 90px;
+            background: #0c1826;
+            border: 1px solid #365a7a;
+            border-radius: 18px;
+            padding: 5px 10px;
+            color: #fff;
+            text-align: center;
+            font-family: monospace;
+            font-size: 13px;
+        }
+        .unit {
+            font-size: 0.72rem;
+            opacity: 0.65;
+        }
+        .delta-badge {
+            background: rgba(0,0,0,0.25);
+            border-radius: 18px;
+            padding: 12px;
+            text-align: center;
+            margin-bottom: 14px;
+        }
+        .delta-value {
+            font-size: 2.2rem;
+            font-weight: 700;
+            font-family: monospace;
+            color: #ffdd70;
+            line-height: 1.2;
+            margin: 4px 0;
+        }
+        .formula {
+            font-family: monospace;
+            background: rgba(8,22,36,0.6);
+            padding: 8px;
+            border-radius: 12px;
+            font-size: 0.78rem;
+            margin: 10px 0;
+            color: #c0e0ff;
+        }
+
+        /* ========== 高级科技感按钮 ========== */
+        .tech-btn {
+            position: relative;
+            width: 100%;
+            padding: 12px 16px;
+            margin-top: 10px;
+            border-radius: 12px;
+            border: none;
+            font-size: 14px;
+            font-weight: 600;
+            color: #ffffff;
+            background: linear-gradient(135deg, #1A2A44, #0F1E36);
+            cursor: pointer;
+            overflow: hidden;
+            transition: all 0.3s ease;
+            box-shadow: 
+                0 0 0 1px rgba(79,184,255,0.3),
+                0 4px 12px rgba(0,0,0,0.2);
+        }
+        .tech-btn::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(79,184,255,0.2), transparent);
+            transition: left 0.6s ease;
+        }
+        .tech-btn:hover {
+            transform: translateY(-2px);
+            background: linear-gradient(135deg, #253B5C, #162A47);
+            box-shadow: 
+                0 0 0 1px rgba(79,184,255,0.5),
+                0 6px 20px rgba(79,184,255,0.15);
+        }
+        .tech-btn:hover::before {
+            left: 100%;
+        }
+        .tech-btn:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+        }
+
+        .guide {
+            font-size: 0.72rem;
+            margin-top: 12px;
+            border-top: 1px solid rgba(95,139,179,0.3);
+            padding-top: 10px;
+            line-height: 1.5;
+            opacity: 0.85;
+        }
+        .status-tip {
+            position: absolute;
+            bottom: 34%;
+            left: 18px;
+            background: rgba(0,0,0,0.5);
+            padding: 5px 14px;
+            border-radius: 20px;
+            font-size: 12px;
+            color: #bbd9ff;
+            pointer-events: none;
+            z-index: 12;
+            backdrop-filter: blur(6px);
+        }
+        h3 {
+            margin: 0 0 8px 0;
+            font-size: 1.25rem;
+            color: #74c7ff;
+        }
+        hr {
+            margin: 8px 0;
+            border: none;
+            height: 1px;
+            background: rgba(58,104,133,0.4);
+        }
+        @media (max-width: 700px) {
+            .control-dashboard { padding: 10px 14px; height: 38%; }
+            .top-canvas { height: 62%; }
+            .delta-value { font-size: 1.6rem; }
+            .params-panel { gap: 10px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="top-canvas" id="canvas-container"></div>
+    <div class="control-dashboard">
+        <div class="dashboard-row">
+            <div class="params-panel">
+                <div class="param-card">
+                    <div class="param-label"><span>📌 拉力 F</span><span id="F_val">10.0</span><span class="unit">kN</span></div>
+                    <input type="range" id="F_slider" min="0" max="100" step="1" value="10">
+                    <div class="value-input"><input type="number" id="F_input" step="1" value="10"> <span class="unit">千牛</span></div>
+                </div>
+                <div class="param-card">
+                    <div class="param-label"><span>📏 杆件原长 L</span><span id="L_val">1000</span><span class="unit">mm</span></div>
+                    <input type="range" id="L_slider" min="300" max="2500" step="10" value="1000">
+                    <div class="value-input"><input type="number" id="L_input" step="10" value="1000"> <span class="unit">毫米</span></div>
+                </div>
+                <div class="param-card">
+                    <div class="param-label"><span>🔲 横截面积 A</span><span id="A_val">200</span><span class="unit">mm²</span></div>
+                    <input type="range" id="A_slider" min="30" max="800" step="5" value="200">
+                    <div class="value-input"><input type="number" id="A_input" step="5" value="200"> <span class="unit">平方毫米</span></div>
+                </div>
+                <div class="param-card">
+                    <div class="param-label"><span>⚡ 弹性模量 E</span><span id="E_val">200</span><span class="unit">GPa</span></div>
+                    <input type="range" id="E_slider" min="30" max="350" step="5" value="200">
+                    <div class="value-input"><input type="number" id="E_input" step="5" value="200"> <span class="unit">吉帕</span></div>
+                </div>
+            </div>
+            <div class="info-panel">
+                <div class="delta-badge">
+                    <div style="font-size:0.75rem;">🔬 轴向变形 ΔL</div>
+                    <div class="delta-value" id="delta_display">0.2500 mm</div>
+                    <div class="formula" id="formula_text">ΔL = (F·L)/(E·A) = 10×1000/(200×200) = 0.2500 mm</div>
+                </div>
+
+                <!-- 高级科技按钮 -->
+                <button class="tech-btn" id="resetBtn">🔄 重置实验基准参数</button>
+
+                <div class="guide">
+                    💡 控制变量探究胡克定律：<br>
+                    • 拉力越大、杆件越长，变形量越大<br>
+                    • 截面越粗、材质越硬，变形量越小<br>
+                    ✨ 核心公式：ΔL = FL/(EA)<br>
+                    🖱️ 拖拽旋转视角 | 滚轮缩放画面
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="status-tip">
+        🧬 两端对称受拉 | 拖动参数杆件变黄，松手恢复原色
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.128.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.128.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x071a2b);
+        scene.fog = new THREE.FogExp2(0x071a2b, 0.005);
+
+        const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 1000);
+        camera.position.set(4.2, 2.8, 5.2);
+        camera.lookAt(0, 0, 0);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+        container.appendChild(renderer.domElement);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.06;
+        controls.autoRotate = false;
+        controls.minDistance = 2;
+        controls.maxDistance = 12;
+        controls.target.set(0, 0, 0);
+
+        const gridHelper = new THREE.GridHelper(9, 22, 0x72a3ff, 0x2c4a6e);
+        gridHelper.position.y = -0.8;
+        gridHelper.material.transparent = true;
+        gridHelper.material.opacity = 0.25;
+        scene.add(gridHelper);
+        
+        const axesHelper = new THREE.AxesHelper(4);
+        axesHelper.material.transparent = true;
+        axesHelper.material.opacity = 0.12;
+        scene.add(axesHelper);
+
+        const ambientLight = new THREE.AmbientLight(0x485880, 0.6);
+        scene.add(ambientLight);
+        const mainLight = new THREE.DirectionalLight(0xffffff, 1.2);
+        mainLight.position.set(2.5, 4, 3);
+        mainLight.castShadow = true;
+        scene.add(mainLight);
+        const softLight = new THREE.PointLight(0x64a8e6, 0.45);
+        softLight.position.set(-2, 2, 2);
+        scene.add(softLight);
+        const rimLight = new THREE.PointLight(0xffb370, 0.25);
+        rimLight.position.set(0, 1.5, -4);
+        scene.add(rimLight);
+
+        const starGeo = new THREE.BufferGeometry();
+        const starNum = 900;
+        const starPos = new Float32Array(starNum * 3);
+        for(let i=0;i<starNum;i++){
+            starPos[i*3] = (Math.random()-0.5)*200;
+            starPos[i*3+1] = (Math.random()-0.5)*80;
+            starPos[i*3+2] = (Math.random()-0.5)*90 -50;
+        }
+        starGeo.setAttribute('position',new THREE.BufferAttribute(starPos,3));
+        const starMat = new THREE.PointsMaterial({color:0xb8d8ff,size:0.06,transparent:true,opacity:0.55});
+        const stars = new THREE.Points(starGeo,starMat);
+        scene.add(stars);
+
+        let rodGroup = new THREE.Group();
+        scene.add(rodGroup);
+        let currentRod = null,leftEndSphere=null,rightEndSphere=null;
+        let leftArrow=null,rightArrow=null,leftRing=null,rightRing=null;
+        let isDragging = false;
+        const baseColor = 0x6fa8d8;
+        const stretchColor = 0xffd320;
+
+        const F_slider = document.getElementById('F_slider');
+        const L_slider = document.getElementById('L_slider');
+        const A_slider = document.getElementById('A_slider');
+        const E_slider = document.getElementById('E_slider');
+        const F_input = document.getElementById('F_input');
+        const L_input = document.getElementById('L_input');
+        const A_input = document.getElementById('A_input');
+        const E_input = document.getElementById('E_input');
+        const F_valSpan = document.getElementById('F_val');
+        const L_valSpan = document.getElementById('L_val');
+        const A_valSpan = document.getElementById('A_val');
+        const E_valSpan = document.getElementById('E_val');
+        const deltaDisplay = document.getElementById('delta_display');
+        const formulaTextSpan = document.getElementById('formula_text');
+        const resetBtn = document.getElementById('resetBtn');
+
+        function computeDeltaL(F_kN, L_mm, A_mm2, E_GPa) {
+            if(E_GPa<=0||A_mm2<=0) return 0;
+            return (F_kN * L_mm) / (E_GPa * A_mm2);
+        }
+
+        const VISUAL_SCALE = 18.0;
+        const BASE_HALF_LEN_AT_1000 = 1.4;
+        function getVisualHalfLength3D(L_mm, delta_mm) {
+            const originalHalf = (L_mm / 1000) * BASE_HALF_LEN_AT_1000;
+            const visualDeltaTotal = delta_mm * VISUAL_SCALE;
+            const scale3D = BASE_HALF_LEN_AT_1000 / 1000;
+            const extraHalf = (visualDeltaTotal * scale3D) / 2;
+            return originalHalf + extraHalf;
+        }
+
+        function update3DRod() {
+            let F = Number(F_input.value)||10;
+            let L = Number(L_input.value)||1000;
+            let A = Number(A_input.value)||200;
+            let E = Number(E_input.value)||200;
+
+            F = Math.max(0,Math.min(100,F));
+            L = Math.max(300,Math.min(2500,L));
+            A = Math.max(30,Math.min(800,A));
+            E = Math.max(30,Math.min(350,E));
+
+            const delta = computeDeltaL(F, L, A, E);
+
+            F_valSpan.innerText = F.toFixed(1);
+            L_valSpan.innerText = Math.round(L);
+            A_valSpan.innerText = Math.round(A);
+            E_valSpan.innerText = Math.round(E);
+            deltaDisplay.innerText = delta.toFixed(4) + ' mm';
+            formulaTextSpan.innerHTML = `ΔL = (F·L)/(E·A) = ${F}×${L}/(${E}×${A}) = ${delta.toFixed(4)} mm`;
+
+            F_slider.value = F;
+            L_slider.value = L;
+            A_slider.value = A;
+            E_slider.value = E;
+            F_input.value = F;
+            L_input.value = L;
+            A_input.value = A;
+            E_input.value = E;
+
+            const halfLen = getVisualHalfLength3D(L, delta);
+            const totalLen = halfLen * 2;
+            const radius = 0.16;
+
+            if(currentRod) rodGroup.remove(currentRod);
+            const rodGeo = new THREE.CylinderGeometry(radius, radius, totalLen, 40);
+            const rodMat = new THREE.MeshStandardMaterial({
+                color: isDragging ? stretchColor : baseColor,
+                metalness:0.75,roughness:0.25,emissive:0x10243a
+            });
+            const rod = new THREE.Mesh(rodGeo,rodMat);
+            rod.castShadow = true;
+            rod.rotation.z = Math.PI/2;
+            rodGroup.add(rod);
+            currentRod = rod;
+
+            if(leftEndSphere) rodGroup.remove(leftEndSphere);
+            if(rightEndSphere) rodGroup.remove(rightEndSphere);
+            const sphereMat = new THREE.MeshStandardMaterial({color:0xe6a060,metalness:0.55,emissive:0x2b1600});
+            const leftSphere = new THREE.Mesh(new THREE.SphereGeometry(0.18,26,26),sphereMat);
+            const rightSphere = new THREE.Mesh(new THREE.SphereGeometry(0.18,26,26),sphereMat);
+            leftSphere.position.x = -halfLen;
+            rightSphere.position.x = halfLen;
+            rodGroup.add(leftSphere,rightSphere);
+            leftEndSphere = leftSphere;
+            rightEndSphere = rightSphere;
+
+            if(leftRing) rodGroup.remove(leftRing);
+            if(rightRing) rodGroup.remove(rightRing);
+            const ringGeo = new THREE.TorusGeometry(radius+0.03,0.025,18,44);
+            const ringMat = new THREE.MeshStandardMaterial({color:0xffb070,metalness:0.85});
+            const lRing = new THREE.Mesh(ringGeo,ringMat);
+            const rRing = new THREE.Mesh(ringGeo,ringMat);
+            lRing.rotation.x = Math.PI/2;
+            rRing.rotation.x = Math.PI/2;
+            lRing.position.x = -halfLen;
+            rRing.position.x = halfLen;
+            rodGroup.add(lRing,rRing);
+            leftRing = lRing;
+            rightRing = rRing;
+
+            if(leftArrow) rodGroup.remove(leftArrow);
+            if(rightArrow) rodGroup.remove(rightArrow);
+            const leftArrowObj = new THREE.ArrowHelper(new THREE.Vector3(-1,0,0),new THREE.Vector3(-halfLen-0.38,0.12,0),0.68,0xff8a60,0.38,0.26);
+            const rightArrowObj = new THREE.ArrowHelper(new THREE.Vector3(1,0,0),new THREE.Vector3(halfLen+0.38,0.12,0),0.68,0xff8a60,0.38,0.26);
+            rodGroup.add(leftArrowObj,rightArrowObj);
+            leftArrow = leftArrowObj;
+            rightArrow = rightArrowObj;
+        }
+
+        function resetToBenchmark() {
+            F_slider.value = 10;L_slider.value = 1000;
+            A_slider.value = 200;E_slider.value = 200;
+            F_input.value = 10;L_input.value = 1000;
+            A_input.value = 200;E_input.value = 200;
+            update3DRod();
+        }
+
+        function bindEvents() {
+            const slideStart = ()=>{ isDragging = true; };
+            const slideEnd = ()=>{ isDragging = false; update3DRod(); };
+
+            const slideUpdate = ()=>{
+                F_input.value = F_slider.value;
+                L_input.value = L_slider.value;
+                A_input.value = A_slider.value;
+                E_input.value = E_slider.value;
+                update3DRod();
+            };
+            const inputUpdate = ()=> update3DRod();
+
+            [F_slider,L_slider,A_slider,E_slider].forEach(slider=>{
+                slider.addEventListener('mousedown',slideStart);
+                slider.addEventListener('touchstart',slideStart);
+                slider.addEventListener('mouseup',slideEnd);
+                slider.addEventListener('touchend',slideEnd);
+                slider.addEventListener('input',slideUpdate);
+            });
+
+            F_input.addEventListener('input',inputUpdate);
+            L_input.addEventListener('input',inputUpdate);
+            A_input.addEventListener('input',inputUpdate);
+            E_input.addEventListener('input',inputUpdate);
+            resetBtn.addEventListener('click',resetToBenchmark);
+        }
+
+        bindEvents();
+        update3DRod();
+
+        const particleGeo = new THREE.BufferGeometry();
+        const particleNum = 450;
+        const particlePos = new Float32Array(particleNum*3);
+        for(let i=0;i<particleNum;i++){
+            particlePos[i*3] = (Math.random()-0.5)*5.5;
+            particlePos[i*3+1] = (Math.random()-0.5)*1.8;
+            particlePos[i*3+2] = (Math.random()-0.5)*2.2;
+        }
+        particleGeo.setAttribute('position',new THREE.BufferAttribute(particlePos,3));
+        const particleMat = new THREE.PointsMaterial({color:0x6fb8ff,size:0.022,transparent:true,opacity:0.38});
+        const particles = new THREE.Points(particleGeo, particleMat);
+        scene.add(particles);
+
+        let time = 0;
+        function animate() {
+            requestAnimationFrame(animate);
+            time += 0.007;
+            stars.rotation.y += 0.0004;
+            stars.rotation.x += 0.0002;
+            particles.rotation.y = time*0.08;
+            particles.rotation.z = Math.sin(time*0.15)*0.08;
+            controls.update();
+            renderer.render(scene,camera);
+        }
+        animate();
+
+        window.addEventListener('resize',()=>{
+            const w = container.clientWidth;
+            const h = container.clientHeight;
+            camera.aspect = w/h;
+            camera.updateProjectionMatrix();
+            renderer.setSize(w,h);
+        });
+    </script>
+</body>
+</html>
