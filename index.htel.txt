@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>3D轴向拉压杆：极简形变可视化 | 胡克定律动态模拟 | 可收起操控台</title>
+  <style>
+    /* 全局样式与布局 */
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: 'Segoe UI', 'Roboto', 'Microsoft YaHei', 'PingFang SC', sans-serif;
+    }
+
+    .canvas-wrapper {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+
+    /* 操控台 - 全新可收起设计，更具体直观 */
+    .control-dashboard {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      background: rgba(12, 25, 35, 0.96);
+      backdrop-filter: blur(16px);
+      border-top: 1px solid rgba(80, 220, 240, 0.7);
+      z-index: 20;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 -12px 35px rgba(0, 0, 0, 0.5);
+      color: #eef4ff;
+      box-sizing: border-box;
+      font-size: 14px;
+      transition: transform 0.35s cubic-bezier(0.2, 0.9, 0.4, 1.1);
+      transform: translateY(0);
+      max-height: 70vh;
+      border-radius: 20px 20px 0 0;
+    }
+
+    /* 收起状态 */
+    .control-dashboard.collapsed {
+      transform: translateY(calc(100% - 52px));
+    }
+
+    /* 操控台手柄条 (收起/展开按钮区域) */
+    .dashboard-handle {
+      background: rgba(30, 55, 70, 0.9);
+      padding: 10px 24px;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-radius: 28px 28px 0 0;
+      border-bottom: 1px solid rgba(90, 200, 255, 0.5);
+      transition: background 0.2s;
+      user-select: none;
+    }
+    .dashboard-handle:hover {
+      background: rgba(50, 85, 105, 0.9);
+    }
+    .handle-title {
+      font-weight: 600;
+      font-size: 1rem;
+      letter-spacing: 1px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .handle-title span:first-child {
+      font-size: 1.3rem;
+    }
+    .toggle-icon {
+      font-size: 1.4rem;
+      transition: transform 0.3s;
+      font-weight: bold;
+    }
+    .control-dashboard.collapsed .toggle-icon {
+      transform: rotate(180deg);
+    }
+    .handle-hint {
+      font-size: 0.7rem;
+      background: rgba(0,0,0,0.5);
+      padding: 3px 10px;
+      border-radius: 24px;
+      color: #8cc9ff;
+    }
+
+    /* 主体内容区域，滚动条美化 */
+    .dashboard-content {
+      padding: 16px 24px 20px;
+      overflow-y: auto;
+      max-height: calc(70vh - 52px);
+      scrollbar-width: thin;
+    }
+    .dashboard-content::-webkit-scrollbar {
+      width: 5px;
+    }
+    .dashboard-content::-webkit-scrollbar-track {
+      background: #1a2f3c;
+      border-radius: 10px;
+    }
+    .dashboard-content::-webkit-scrollbar-thumb {
+      background: #5bc0ff;
+      border-radius: 10px;
+    }
+
+    .dashboard-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 24px;
+      justify-content: space-between;
+      width: 100%;
+    }
+
+    .params-panel {
+      flex: 2.5;
+      min-width: 280px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px 22px;
+    }
+
+    .info-panel {
+      flex: 1.4;
+      min-width: 260px;
+      background: rgba(0, 0, 0, 0.65);
+      border-radius: 28px;
+      padding: 14px 22px;
+      border-left: 4px solid #5bc0ff;
+      backdrop-filter: blur(4px);
+      box-shadow: 0 6px 18px rgba(0,0,0,0.3);
+    }
+
+    .info-panel h3 {
+      margin: 0 0 10px 0;
+      font-weight: 500;
+      letter-spacing: 1px;
+      font-size: 1.2rem;
+      color: #bbf0ff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .info-panel p {
+      margin: 8px 0;
+      font-weight: 500;
+      display: flex;
+      justify-content: space-between;
+      border-bottom: 1px dashed rgba(200,200,200,0.3);
+      padding-bottom: 5px;
+    }
+
+    .formula {
+      font-family: 'Courier New', monospace;
+      background: #0a1f2f;
+      padding: 6px 10px;
+      border-radius: 20px;
+      margin: 10px 0;
+      text-align: center;
+      font-size: 0.85rem;
+      border: 1px solid #2c8ecc;
+      color: #c7eaff;
+    }
+
+    .param-card {
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 24px;
+      padding: 12px 16px;
+      transition: 0.1s ease;
+      border: 1px solid rgba(255,255,255,0.12);
+    }
+
+    .param-label {
+      display: flex;
+      justify-content: space-between;
+      font-weight: 600;
+      margin-bottom: 10px;
+      font-size: 0.95rem;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      cursor: pointer;
+      background: #2c4a6e;
+      height: 5px;
+      border-radius: 6px;
+      -webkit-appearance: none;
+    }
+    input[type="range"]:focus { outline: none; }
+    input[type="range"]::-webkit-slider-thumb {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #5bc0ff;
+      border: none;
+      box-shadow: 0 0 8px #8ad4ff;
+      cursor: pointer;
+      -webkit-appearance: none;
+    }
+    .value-input {
+      display: flex;
+      gap: 12px;
+      margin-top: 8px;
+      font-size: 0.8rem;
+      color: #c0def5;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .unit-badge {
+      background: #1a3f55;
+      border-radius: 20px;
+      padding: 2px 8px;
+      font-size: 0.7rem;
+    }
+    .highlight-data {
+      font-weight: bold;
+      color: #ffdd99;
+      font-family: monospace;
+      font-size: 1.05rem;
+    }
+    .interact-hint {
+      position: absolute;
+      bottom: 18px;
+      right: 22px;
+      background: rgba(0,0,0,0.6);
+      padding: 6px 16px;
+      border-radius: 32px;
+      font-size: 12px;
+      color: #cceeff;
+      pointer-events: none;
+      z-index: 25;
+      font-family: monospace;
+      backdrop-filter: blur(6px);
+      letter-spacing: 0.5px;
+    }
+    @media (max-width: 700px) {
+      .dashboard-content { padding: 12px 16px; }
+      .param-card { padding: 10px 12px; }
+      .info-panel { padding: 10px 14px; }
+      .handle-title { font-size: 0.85rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="canvas-wrapper" id="canvas-container"></div>
+  <div class="interact-hint">🖱️ 鼠标拖拽旋转视角 | 滚动缩放 | 杆体长度 & 颜色随形变强度动态变化</div>
+
+  <!-- 可收起操控台，结构更具体 -->
+  <div class="control-dashboard" id="dashboard">
+    <div class="dashboard-handle" id="dashboardHandle">
+      <div class="handle-title">
+        <span>📊</span> 力学控制台 · 胡克定律动态模拟
+        <span style="font-size: 0.7rem; margin-left: 8px;">⚡ 实时形变</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <div class="handle-hint">点击收起/展开</div>
+        <div class="toggle-icon">▼</div>
+      </div>
+    </div>
+    <div class="dashboard-content">
+      <div class="dashboard-row">
+        <div class="params-panel">
+          <div class="param-card">
+            <div class="param-label">
+              <span>🔧 轴向拉力 <span style="font-weight:700;">F</span></span>
+              <span id="forceVal" class="highlight-data">500.0</span> <span>N</span>
+            </div>
+            <input type="range" id="force" min="100" max="1000" step="1" value="500" />
+            <div class="value-input">
+              <span>⬅️ 较小</span>
+              <span>增大拉力 → 伸长更明显</span>
+              <span>较大 ➡️</span>
+            </div>
+          </div>
+          <div class="param-card">
+            <div class="param-label">
+              <span>📏 原始长度 <span style="font-weight:700;">L₀</span></span>
+              <span id="lengthVal" class="highlight-data">2.00</span> <span>m</span>
+            </div>
+            <input type="range" id="length" min="1.0" max="5.0" step="0.02" value="2.0" />
+            <div class="value-input"><span>基准长度影响总变形量</span><span class="unit-badge">原长基准</span></div>
+          </div>
+          <div class="param-card">
+            <div class="param-label">
+              <span>🔘 横截面积 <span style="font-weight:700;">A</span></span>
+              <span id="areaVal" class="highlight-data">0.0100</span> <span>m²</span>
+            </div>
+            <input type="range" id="area" min="0.001" max="0.02" step="0.0005" value="0.01" />
+            <div class="value-input"><span>面积越小 → 应力越大 → 变形越大</span><span class="unit-badge">↘️ 反比</span></div>
+          </div>
+          <div class="param-card">
+            <div class="param-label">
+              <span>⚙️ 弹性模量 <span style="font-weight:700;">E</span></span>
+              <span id="modulusVal" class="highlight-data">200.0</span> <span>GPa</span>
+            </div>
+            <input type="range" id="modulus" min="80" max="320" step="5" value="200" />
+            <div class="value-input"><span>模量越小 → 材料越软 → 变形越显著</span><span class="unit-badge">刚度</span></div>
+          </div>
+        </div>
+
+        <div class="info-panel">
+          <h3>📐 胡克定律 · 轴向变形实时值</h3>
+          <div class="formula">ΔL = (F × L₀) / (E × A)</div>
+          <p><span>📉 轴向变形 ΔL :</span> <span id="deformation" style="font-weight:bold; color:#ffdd99; font-size:1.1rem;">0.000000</span> <span style="font-size:0.75rem;">m</span></p>
+          <p><span>⚡ 应力 σ = F/A :</span> <span id="stress">0.00</span> <span style="font-size:0.75rem;">MPa</span></p>
+          <p><span>🌀 应变 ε = ΔL/L₀ :</span> <span id="strain">0.00000</span></p>
+          <p><span>✅ 胡克验证 (σ/E) :</span> <span id="hookeCheck" style="color:#aaffdd; font-family: monospace;">----</span></p>
+          <div style="margin-top: 12px; font-size:12px; background:#0a1a2a; border-radius: 20px; padding: 6px 10px; text-align:center;">
+            🎨 杆体颜色随形变强度渐变 | 端帽金属质感 | 无冗余线条
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.140.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.140.0/examples/jsm/"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+
+    // --- 初始化场景、相机、渲染器 ---
+    const container = document.getElementById('canvas-container');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x050e1a);
+    scene.fog = new THREE.FogExp2(0x050e1a, 0.007);
+
+    const camera = new THREE.PerspectiveCamera(42, container.clientWidth / container.clientHeight, 0.1, 1000);
+    camera.position.set(5.8, 4.5, 6.2);
+    camera.lookAt(0, 0, 0);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(container.clientWidth, container.clientHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.setPixelRatio(window.devicePixelRatio);
+    container.appendChild(renderer.domElement);
+    
+    const labelRenderer = new CSS2DRenderer();
+    labelRenderer.setSize(container.clientWidth, container.clientHeight);
+    labelRenderer.domElement.style.position = 'absolute';
+    labelRenderer.domElement.style.top = '0px';
+    labelRenderer.domElement.style.left = '0px';
+    labelRenderer.domElement.style.pointerEvents = 'none';
+    container.appendChild(labelRenderer.domElement);
+    
+    // 轨道控制
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.06;
+    controls.autoRotate = false;
+    controls.enableZoom = true;
+    controls.enablePan = true;
+    controls.zoomSpeed = 1.2;
+    controls.rotateSpeed = 1.0;
+    controls.target.set(0, 0, 0);
+    
+    // 辅助视觉: 极简网格
+    const gridHelper = new THREE.GridHelper(12, 24, 0x88aaff, 0x446688);
+    gridHelper.position.y = -0.9;
+    gridHelper.material.transparent = true;
+    gridHelper.material.opacity = 0.2;
+    scene.add(gridHelper);
+    
+    const axesHelper = new THREE.AxesHelper(5);
+    axesHelper.material.transparent = true;
+    axesHelper.material.opacity = 0.06;
+    scene.add(axesHelper);
+    
+    // 灯光系统
+    const ambientLight = new THREE.AmbientLight(0x404064);
+    scene.add(ambientLight);
+    const mainLight = new THREE.DirectionalLight(0xffffff, 1.2);
+    mainLight.position.set(2, 5, 3);
+    mainLight.castShadow = true;
+    scene.add(mainLight);
+    const fillLight = new THREE.PointLight(0x4488cc, 0.5);
+    fillLight.position.set(-2.2, 1.8, 3.2);
+    scene.add(fillLight);
+    const backLight = new THREE.PointLight(0xffaa77, 0.45);
+    backLight.position.set(0, 1.5, -4.8);
+    scene.add(backLight);
+    const rimLight = new THREE.PointLight(0xff9966, 0.4);
+    rimLight.position.set(1.2, 1.2, -3.5);
+    scene.add(rimLight);
+    const hemiLight = new THREE.HemisphereLight(0x668899, 0x332c2a, 0.55);
+    scene.add(hemiLight);
+    
+    // --- 杆件模型组 ---
+    const rodGroup = new THREE.Group();
+    scene.add(rodGroup);
+    let currentCylinder = null;
+    
+    function getRadiusFromArea(area) { return Math.sqrt(area / Math.PI); }
+    
+    function updateRodVisual(visualLengthM, areaM2, intensityFactor = 0) {
+      while(rodGroup.children.length > 0) {
+        rodGroup.remove(rodGroup.children[0]);
+      }
+      
+      const radiusVal = getRadiusFromArea(areaM2);
+      const finalRadius = Math.max(radiusVal, 0.085);
+      // 形变强度决定颜色：从冷色(0.55)到暖红(0.2)
+      const hue = 0.55 - intensityFactor * 0.38;
+      const sat = 0.7 + intensityFactor * 0.25;
+      const light = 0.55 + intensityFactor * 0.12;
+      const materialColor = new THREE.Color().setHSL(hue, sat, light);
+      
+      const material = new THREE.MeshStandardMaterial({ 
+        color: materialColor, 
+        roughness: 0.28, 
+        metalness: 0.82,
+        emissive: new THREE.Color().setHSL(hue, 0.9, 0.1),
+        emissiveIntensity: 0.1 + intensityFactor * 0.5,
+        flatShading: false
+      });
+      const geometry = new THREE.CylinderGeometry(finalRadius, finalRadius, visualLengthM, 96, 64);
+      const cylinder = new THREE.Mesh(geometry, material);
+      cylinder.castShadow = true;
+      cylinder.rotation.z = Math.PI / 2;
+      cylinder.position.set(0, 0, 0);
+      rodGroup.add(cylinder);
+      currentCylinder = cylinder;
+      
+      // 端帽金属质感
+      const capMaterial = new THREE.MeshStandardMaterial({ color: 0xdd9955, metalness: 0.94, roughness: 0.18 });
+      const capGeo = new THREE.SphereGeometry(finalRadius * 0.94, 48, 36);
+      const leftCap = new THREE.Mesh(capGeo, capMaterial);
+      const rightCap = new THREE.Mesh(capGeo, capMaterial);
+      leftCap.position.set(-visualLengthM / 2, 0, 0);
+      rightCap.position.set(visualLengthM / 2, 0, 0);
+      leftCap.castShadow = true;
+      rightCap.castShadow = true;
+      rodGroup.add(leftCap);
+      rodGroup.add(rightCap);
+    }
+    
+    // 拉力箭头与标签
+    let arrowsAndLabels = null;
+    function initArrows() {
+      const arrowColor = 0xff7777;
+      const arrowRight = new THREE.ArrowHelper(new THREE.Vector3(1,0,0), new THREE.Vector3(1.5,0,0), 0.82, arrowColor, 0.45, 0.32);
+      const arrowLeft = new THREE.ArrowHelper(new THREE.Vector3(-1,0,0), new THREE.Vector3(-1.5,0,0), 0.82, arrowColor, 0.45, 0.32);
+      rodGroup.add(arrowRight);
+      rodGroup.add(arrowLeft);
+      
+      const leftDiv = document.createElement('div');
+      leftDiv.textContent = '← 拉力 F';
+      leftDiv.style.cssText = 'color:#ffbb99;font-size:14px;font-weight:bold;background:rgba(0,0,0,0.6);padding:2px 12px;border-radius:28px;border-left:3px solid #ff8866;backdrop-filter:blur(4px);';
+      const rightDiv = document.createElement('div');
+      rightDiv.textContent = '拉力 F →';
+      rightDiv.style.cssText = 'color:#ffbb99;font-size:14px;font-weight:bold;background:rgba(0,0,0,0.6);padding:2px 12px;border-radius:28px;border-right:3px solid #ff8866;backdrop-filter:blur(4px);';
+      const leftLabel = new CSS2DObject(leftDiv);
+      const rightLabel = new CSS2DObject(rightDiv);
+      rodGroup.add(leftLabel);
+      rodGroup.add(rightLabel);
+      return { arrowRight, arrowLeft, leftLabel, rightLabel };
+    }
+    
+    arrowsAndLabels = initArrows();
+    function updateArrowsPosition(len) {
+      const half = len / 2;
+      arrowsAndLabels.arrowRight.position.set(half + 0.28, 0, 0);
+      arrowsAndLabels.arrowLeft.position.set(-half - 0.28, 0, 0);
+      arrowsAndLabels.leftLabel.position.set(-half - 0.78, 0.45, 0);
+      arrowsAndLabels.rightLabel.position.set(half + 0.78, 0.45, 0);
+    }
+    
+    // 星空背景点缀
+    const starFieldGeo = new THREE.BufferGeometry();
+    const starCount = 1300;
+    const starPos = new Float32Array(starCount * 3);
+    for (let i=0; i<starCount; i++) {
+      starPos[i*3] = (Math.random() - 0.5) * 480;
+      starPos[i*3+1] = (Math.random() - 0.5) * 260;
+      starPos[i*3+2] = (Math.random() - 0.5) * 200 - 80;
+    }
+    starFieldGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+    const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.07, transparent: true, opacity: 0.45 });
+    const stars = new THREE.Points(starFieldGeo, starMat);
+    scene.add(stars);
+    
+    // --- 物理计算与UI绑定 ---
+    const forceSlider = document.getElementById('force');
+    const lengthSlider = document.getElementById('length');
+    const areaSlider = document.getElementById('area');
+    const modulusSlider = document.getElementById('modulus');
+    const forceValSpan = document.getElementById('forceVal');
+    const lengthValSpan = document.getElementById('lengthVal');
+    const areaValSpan = document.getElementById('areaVal');
+    const modulusValSpan = document.getElementById('modulusVal');
+    const deformationSpan = document.getElementById('deformation');
+    const stressSpan = document.getElementById('stress');
+    const strainSpan = document.getElementById('strain');
+    const hookeCheckSpan = document.getElementById('hookeCheck');
+    
+    let F = 500, L = 2.0, A = 0.01, E_GPa = 200, E = 200e9;
+    function computeDeltaL(force, length, area, Epa) { return (force * length) / (Epa * area); }
+    
+    function updateAll() {
+      E = E_GPa * 1e9;
+      const deltaL = computeDeltaL(F, L, A, E);
+      const strainVal = deltaL / L;
+      const stressPa = F / A;
+      const stressMPa = stressPa / 1e6;
+      // 视觉强度因子: 基于相对伸长映射，限制最大0.85
+      let intensity = Math.min(0.85, Math.abs(deltaL) / (L * 0.18));
+      intensity = Math.max(0.06, Math.pow(intensity, 0.9));
+      
+      deformationSpan.textContent = deltaL.toFixed(8);
+      stressSpan.textContent = stressMPa.toFixed(3);
+      strainSpan.textContent = strainVal.toExponential(5);
+      hookeCheckSpan.innerHTML = `${strainVal.toExponential(5)}  ≈  ${(stressPa/E).toExponential(5)}`;
+      
+      let visualLength = L + deltaL;
+      visualLength = Math.max(visualLength, 0.48);
+      updateRodVisual(visualLength, A, intensity);
+      updateArrowsPosition(visualLength);
+    }
+    
+    function syncFromUI() {
+      F = parseFloat(forceSlider.value);
+      L = parseFloat(lengthSlider.value);
+      A = parseFloat(areaSlider.value);
+      E_GPa = parseFloat(modulusSlider.value);
+      forceValSpan.textContent = F.toFixed(1);
+      lengthValSpan.textContent = L.toFixed(3);
+      areaValSpan.textContent = A.toFixed(4);
+      modulusValSpan.textContent = E_GPa.toFixed(1);
+      updateAll();
+    }
+    
+    forceSlider.addEventListener('input', syncFromUI);
+    lengthSlider.addEventListener('input', syncFromUI);
+    areaSlider.addEventListener('input', syncFromUI);
+    modulusSlider.addEventListener('input', syncFromUI);
+    syncFromUI();
+    
+    // 操控台的收起/展开逻辑
+    const dashboard = document.getElementById('dashboard');
+    const handle = document.getElementById('dashboardHandle');
+    handle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      dashboard.classList.toggle('collapsed');
+    });
+    
+    // 简单动画: 星星缓慢旋转
+    let timeAnim = 0;
+    function animate() {
+      requestAnimationFrame(animate);
+      timeAnim += 0.016;
+      stars.rotation.y = timeAnim * 0.0007;
+      stars.rotation.x = Math.sin(timeAnim * 0.0004) * 0.04;
+      controls.update();
+      renderer.render(scene, camera);
+      labelRenderer.render(scene, camera);
+    }
+    animate();
+    
+    window.addEventListener('resize', () => {
+      const w = container.clientWidth, h = container.clientHeight;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+      labelRenderer.setSize(w, h);
+    });
+    
+    console.log('✅ 极简形变可视化 | 可收起操控台 | 杆体颜色/长度随胡克定律实时变化');
+  </script>
+</body>
+</html>
