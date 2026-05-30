@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>弹塑性本构 | 应力彩色映射 | 3D拉压杆模拟</title>
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      overflow: hidden;
+      font-family: 'Inter', 'Segoe UI', 'Poppins', 'Roboto', system-ui, sans-serif;
+      background: #02050a;
+    }
+    #canvas-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+      background: radial-gradient(circle at 30% 25%, #0a1022, #020408);
+    }
+    .glass-panel {
+      position: absolute;
+      bottom: 16px;
+      left: 20px;
+      right: 20px;
+      background: rgba(6, 16, 26, 0.94);
+      backdrop-filter: blur(20px);
+      border-radius: 32px;
+      border: 1px solid rgba(80, 185, 255, 0.5);
+      z-index: 20;
+      padding: 12px 24px 14px;
+      transition: transform 0.35s cubic-bezier(0.2, 0.9, 0.4, 1.1), opacity 0.3s;
+      opacity: 1;
+      transform: translateY(0);
+      pointer-events: auto;
+    }
+    .glass-panel.hidden {
+      transform: translateY(120%);
+      opacity: 0;
+      pointer-events: none;
+    }
+    .toggle-panel-btn {
+      position: absolute;
+      bottom: 28px;
+      right: 30px;
+      width: 44px;
+      height: 44px;
+      background: rgba(10, 25, 40, 0.85);
+      backdrop-filter: blur(12px);
+      border-radius: 40px;
+      border: 1px solid rgba(80, 180, 255, 0.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      z-index: 30;
+      font-size: 22px;
+      color: #c2e4ff;
+      user-select: none;
+    }
+    .toggle-panel-btn:hover {
+      background: #1e4a76cc;
+      border-color: #8acdff;
+      transform: scale(1.03);
+      color: white;
+    }
+    .hint-badge {
+      position: absolute;
+      bottom: 20px;
+      left: 24px;
+      background: rgba(0, 0, 0, 0.55);
+      backdrop-filter: blur(8px);
+      padding: 4px 14px;
+      border-radius: 36px;
+      font-size: 11px;
+      color: #bbdef5;
+      font-family: monospace;
+      z-index: 25;
+      pointer-events: none;
+      border: 0.5px solid #5bc0ff;
+    }
+    .dashboard-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      justify-content: space-between;
+      align-items: stretch;
+    }
+    .params-grid {
+      flex: 1.8;
+      min-width: 260px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 10px;
+    }
+    .param-card {
+      background: rgba(10, 22, 36, 0.75);
+      border-radius: 24px;
+      padding: 8px 12px;
+      border: 1px solid rgba(70, 170, 240, 0.35);
+      transition: 0.15s;
+    }
+    .param-card:hover {
+      border-color: rgba(100, 200, 255, 0.7);
+      background: rgba(18, 38, 55, 0.85);
+    }
+    .param-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 6px;
+      font-weight: 600;
+    }
+    .param-name {
+      font-size: 0.75rem;
+      color: #caeaff;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .param-value {
+      font-family: monospace;
+      background: #00000066;
+      padding: 2px 8px;
+      border-radius: 32px;
+      font-size: 0.7rem;
+      color: #ffdf9c;
+    }
+    select {
+      background: #0a1a2a;
+      border: 1px solid #2c7eb6;
+      border-radius: 28px;
+      color: #caeaff;
+      padding: 4px 8px;
+      font-size: 0.7rem;
+      width: 100%;
+      cursor: pointer;
+      margin-top: 4px;
+    }
+    input[type="range"] {
+      width: 100%;
+      height: 4px;
+      -webkit-appearance: none;
+      background: linear-gradient(90deg, #2c7eb6, #60b0f0);
+      border-radius: 10px;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px;
+      height: 14px;
+      background: white;
+      border-radius: 50%;
+      border: 2px solid #5bc0ff;
+      cursor: pointer;
+    }
+    .range-labels {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 4px;
+      font-size: 0.55rem;
+      color: #8aaec0;
+    }
+    .chart-container {
+      flex: 1.3;
+      min-width: 260px;
+      background: rgba(6, 18, 30, 0.7);
+      border-radius: 28px;
+      padding: 8px 12px;
+      border: 1px solid rgba(64, 170, 230, 0.5);
+    }
+    .chart-title {
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: #bbdef5;
+      text-align: center;
+      margin-bottom: 6px;
+    }
+    #stressStrainChart {
+      width: 100%;
+      height: 170px;
+    }
+    .formula-hub {
+      flex: 1.1;
+      min-width: 230px;
+      background: rgba(6, 18, 30, 0.78);
+      border-radius: 28px;
+      padding: 10px 16px;
+      border: 1px solid rgba(64, 170, 230, 0.5);
+    }
+    .section-title {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: #cdeeff;
+      border-bottom: 1.5px solid #2d7cb0;
+      padding-bottom: 5px;
+      margin-bottom: 10px;
+    }
+    .core-formula {
+      background: #071e2c;
+      border-radius: 18px;
+      padding: 6px;
+      text-align: center;
+      margin-bottom: 10px;
+      border-left: 3px solid #5bc0ff;
+    }
+    .formula-latex {
+      font-family: monospace;
+      font-size: 0.7rem;
+      font-weight: bold;
+      color: #f5e56b;
+    }
+    .metric-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      padding: 5px 0;
+      border-bottom: 1px dashed rgba(100, 180, 220, 0.3);
+    }
+    .metric-label {
+      font-size: 0.7rem;
+      font-weight: 500;
+      color: #cae1fc;
+    }
+    .metric-number {
+      font-family: monospace;
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: #ffe2a4;
+      background: rgba(0, 0, 0, 0.45);
+      padding: 1px 8px;
+      border-radius: 28px;
+    }
+    .validation-badge {
+      margin-top: 8px;
+      background: #05212e;
+      border-radius: 20px;
+      padding: 4px 6px;
+      text-align: center;
+      font-size: 0.65rem;
+      color: #aad4ff;
+    }
+    .color-legend {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      margin-top: 8px;
+      font-size: 0.6rem;
+      background: #071a24a0;
+      border-radius: 40px;
+      padding: 4px 10px;
+      width: fit-content;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .legend-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 20px;
+    }
+    @media (max-width: 900px) {
+      .glass-panel { padding: 8px 14px; }
+      #stressStrainChart { height: 140px; }
+    }
+  </style>
+</head>
+<body>
+<div id="canvas-container"></div>
+<div class="hint-badge">🎨 杆件颜色 = 应力映射 | 蓝色→红色 (弹性→屈服/强化) | 右下角按钮隐藏面板</div>
+<div class="toggle-panel-btn" id="togglePanelBtn" title="隐藏/显示控制台">◀</div>
+
+<div class="glass-panel" id="controlPanel">
+  <div class="dashboard-grid">
+    <div class="params-grid">
+      <div class="param-card">
+        <div class="param-header"><span class="param-name">🔧 拉力 F</span><span class="param-value" id="forceVal">500.0 N</span></div>
+        <input type="range" id="force" min="100" max="1000" step="1" value="500" />
+        <div class="range-labels"><span>100 N</span><span>550 N</span><span>1000 N</span></div>
+      </div>
+      <div class="param-card">
+        <div class="param-header"><span class="param-name">📏 原长 L₀</span><span class="param-value" id="lengthVal">2.00 m</span></div>
+        <input type="range" id="length" min="1.0" max="5.0" step="0.02" value="2.0" />
+        <div class="range-labels"><span>1.0 m</span><span>3.0 m</span><span>5.0 m</span></div>
+      </div>
+      <div class="param-card">
+        <div class="param-header"><span class="param-name">🔘 截面积 A</span><span class="param-value" id="areaVal">0.0100 m²</span></div>
+        <input type="range" id="area" min="0.001" max="0.02" step="0.0005" value="0.01" />
+        <div class="range-labels"><span>0.001</span><span>0.010</span><span>0.020 m²</span></div>
+      </div>
+      <div class="param-card">
+        <div class="param-header"><span class="param-name">⚙️ 弹性模量 E</span><span class="param-value" id="modulusVal">200.0 GPa</span></div>
+        <input type="range" id="modulus" min="80" max="320" step="5" value="200" />
+        <div class="range-labels"><span>80 GPa</span><span>200 GPa</span><span>320 GPa</span></div>
+      </div>
+      <div class="param-card">
+        <div class="param-header"><span class="param-name">🧪 材料模型</span></div>
+        <select id="materialModel">
+          <option value="elastic">📐 线弹性 (Hooke)</option>
+          <option value="perfectPlastic">⚡ 理想弹塑性 (σ_y = 250 MPa)</option>
+          <option value="bilinear">📈 双线性强化 (Et = 0.05·E)</option>
+        </select>
+        <div class="color-legend">
+          <span><span class="legend-dot" style="background:#3a86ff;"></span> 弹性(低应力)</span>
+          <span><span class="legend-dot" style="background:#ffaa66;"></span> 接近屈服</span>
+          <span><span class="legend-dot" style="background:#e63946;"></span> 屈服/塑性区</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="chart-container">
+      <div class="chart-title">📈 应力 σ (MPa) — 应变 ε (×10⁻⁶)</div>
+      <div id="stressStrainChart" style="height: 170px; width: 100%;"></div>
+      <div style="font-size: 9px; text-align: center; color: #6c8fb0; margin-top: 4px;">● 当前工作点 &nbsp;&nbsp; —— 本构曲线 &nbsp; | &nbsp; 🎨 杆体颜色实时映射应力</div>
+    </div>
+
+    <div class="formula-hub">
+      <div class="section-title"><span>📐 应力彩色映射 · 弹塑性响应</span></div>
+      <div class="core-formula"><div class="formula-latex">σ = f(ε) &nbsp;→&nbsp; Color(σ)</div></div>
+      <div class="metric-row"><span class="metric-label">📉 轴向变形 ΔL</span><span class="metric-number" id="deformation">0.000000 m</span></div>
+      <div class="metric-row"><span class="metric-label">⚡ 当前应力 σ</span><span class="metric-number" id="stress">0.00 MPa</span></div>
+      <div class="metric-row"><span class="metric-label">🌀 真实应变 ε</span><span class="metric-number" id="strain">0.00000</span></div>
+      <div class="validation-badge" id="modelStatus">✅ 线弹性阶段 | 蓝色映射</div>
+      <div class="validation-badge" style="background:#1a3a48; margin-top:6px;">🎨 色彩映射: 低应力(蓝) → 屈服(橙黄) → 塑性/强化(红)</div>
+    </div>
+  </div>
+</div>
+
+<script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.140.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.140.0/examples/jsm/"
+    }
+  }
+</script>
+
+<script type="module">
+  import * as THREE from 'three';
+  import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+  import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+
+  // ---------- 材料本构参数 ----------
+  const yieldStressMPa = 250;          // 屈服应力 250 MPa
+  let materialModel = 'elastic';       // 'elastic', 'perfectPlastic', 'bilinear'
+  let E_GPa = 200;                     // 弹性模量 (GPa)
+  let E_Pa = 200e9;
+  const hardeningRatio = 0.05;         // 强化模量 Et = 0.05 * E (双线性)
+  
+  // 根据应变计算应力 (MPa)
+  function computeStressFromStrain(strain) {
+    const E_MPa = E_GPa * 1000;        // MPa单位
+    const stressLinear = strain * E_MPa;
+    if (materialModel === 'elastic') return stressLinear;
+    const yieldStrain = yieldStressMPa / E_MPa;
+    if (materialModel === 'perfectPlastic') {
+      return strain <= yieldStrain ? stressLinear : yieldStressMPa;
+    }
+    if (materialModel === 'bilinear') {
+      if (strain <= yieldStrain) return stressLinear;
+      const Et_MPa = hardeningRatio * E_MPa;
+      const plasticStrain = strain - yieldStrain;
+      return yieldStressMPa + plasticStrain * Et_MPa;
+    }
+    return stressLinear;
+  }
+  
+  // 给定目标应力(MPa)反算应变 (二分法)
+  function solveStrainGivenStress(targetStressMPa) {
+    if (targetStressMPa <= 0) return 0;
+    let epsMin = 0, epsMax = 0.08;
+    if (materialModel === 'bilinear') epsMax = 0.12;
+    const E_MPa = E_GPa * 1000;
+    const yieldStrain = yieldStressMPa / E_MPa;
+    const func = (eps) => computeStressFromStrain(eps) - targetStressMPa;
+    if (func(epsMin) > 0) return epsMin;
+    if (func(epsMax) < 0) {
+      while (func(epsMax) < 0 && epsMax < 0.2) epsMax += 0.02;
+    }
+    for (let iter = 0; iter < 60; iter++) {
+      const mid = (epsMin + epsMax) / 2;
+      const val = func(mid);
+      if (Math.abs(val) < 1e-6) return mid;
+      if (val > 0) epsMax = mid;
+      else epsMin = mid;
+    }
+    return (epsMin + epsMax) / 2;
+  }
+  
+  // 核心应力-颜色映射：根据当前应力MPa 返回 THREE.Color (蓝色 → 橙黄 → 红)
+  // 低应力: 0MPa -> 蓝色 #3a86ff, 屈服应力250MPa -> 橙红 #ff8c42, 高应力400+ -> 红 #e63946
+  function getColorByStress(stressMPa) {
+    const t = Math.min(1.0, Math.max(0.0, stressMPa / 350.0));  // 350MPa 完全红色，线性插值
+    // 色相: 从 0.55 (蓝) 到 0.05 (红) 渐变
+    const hue = 0.55 - t * 0.5;
+    const saturation = 0.85;
+    const lightness = 0.55 + t * 0.2;
+    return new THREE.Color().setHSL(hue, saturation, lightness);
+  }
+  
+  // ---------- Three.js 场景 ----------
+  const container = document.getElementById('canvas-container');
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x02050a);
+  scene.fog = new THREE.FogExp2(0x02050a, 0.005);
+  const camera = new THREE.PerspectiveCamera(38, container.clientWidth / container.clientHeight, 0.1, 1000);
+  camera.position.set(5.6, 4.0, 7.2);
+  camera.lookAt(0, 0, 0);
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(container.clientWidth, container.clientHeight);
+  renderer.shadowMap.enabled = true;
+  container.appendChild(renderer.domElement);
+  const labelRenderer = new CSS2DRenderer();
+  labelRenderer.setSize(container.clientWidth, container.clientHeight);
+  labelRenderer.domElement.style.position = 'absolute';
+  labelRenderer.domElement.style.pointerEvents = 'none';
+  labelRenderer.domElement.style.zIndex = '10';
+  container.appendChild(labelRenderer.domElement);
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.07;
+  controls.rotateSpeed = 1.4;
+  controls.zoomSpeed = 1.3;
+  controls.enableZoom = true;
+  controls.enablePan = true;
+  controls.target.set(0, 0, 0);
+  
+  // 辅助网格与灯光
+  const gridHelper = new THREE.GridHelper(14, 24, 0x3a6ea5, 0x2a4a6a);
+  gridHelper.position.y = -0.9;
+  gridHelper.material.transparent = true;
+  gridHelper.material.opacity = 0.18;
+  scene.add(gridHelper);
+  const axesHelper = new THREE.AxesHelper(5.5);
+  axesHelper.material.transparent = true;
+  axesHelper.material.opacity = 0.06;
+  scene.add(axesHelper);
+  const ambientLight = new THREE.AmbientLight(0x2c3e55);
+  scene.add(ambientLight);
+  const mainLight = new THREE.DirectionalLight(0xffffff, 1.15);
+  mainLight.position.set(2.5, 4.2, 3);
+  mainLight.castShadow = true;
+  scene.add(mainLight);
+  const fillLight = new THREE.PointLight(0x4488bb, 0.55);
+  fillLight.position.set(-2.2, 1.6, 3.2);
+  scene.add(fillLight);
+  const backRim = new THREE.PointLight(0xffaa77, 0.45);
+  backRim.position.set(0, 1.4, -5);
+  scene.add(backRim);
+  const hemiLight = new THREE.HemisphereLight(0x5d7a9c, 0x2a2f3a, 0.62);
+  scene.add(hemiLight);
+  
+  // 杆件组
+  const rodGroup = new THREE.Group();
+  scene.add(rodGroup);
+  let currentCylinder = null;
+  function getRadiusFromArea(area) { return Math.sqrt(area / Math.PI); }
+  
+  // 更新3D杆件 (颜色由应力决定)
+  function updateRodVisual(visualLength, areaM2, stressMPa) {
+    while(rodGroup.children.length) rodGroup.remove(rodGroup.children[0]);
+    const radius = Math.max(getRadiusFromArea(areaM2), 0.088);
+    const materialColor = getColorByStress(stressMPa);
+    const material = new THREE.MeshStandardMaterial({
+      color: materialColor,
+      metalness: 0.75,
+      roughness: 0.3,
+      emissive: new THREE.Color().setHSL(materialColor.getHSL({}).h, 0.8, 0.08),
+      emissiveIntensity: 0.2 + Math.min(0.5, stressMPa / 500)
+    });
+    const cylinderGeo = new THREE.CylinderGeometry(radius, radius, visualLength, 96, 72);
+    const cylinder = new THREE.Mesh(cylinderGeo, material);
+    cylinder.castShadow = true;
+    cylinder.rotation.z = Math.PI / 2;
+    rodGroup.add(cylinder);
+    currentCylinder = cylinder;
+    // 金属端帽保持铜色不变，以凸显主体应力颜色
+    const capMat = new THREE.MeshStandardMaterial({ color: 0xd49c5f, metalness: 0.88, roughness: 0.2 });
+    const capGeo = new THREE.SphereGeometry(radius * 0.93, 36, 32);
+    const leftCap = new THREE.Mesh(capGeo, capMat);
+    const rightCap = new THREE.Mesh(capGeo, capMat);
+    leftCap.position.set(-visualLength / 2, 0, 0);
+    rightCap.position.set(visualLength / 2, 0, 0);
+    rodGroup.add(leftCap);
+    rodGroup.add(rightCap);
+  }
+  
+  // 拉力箭头
+  let arrowRefs;
+  function initArrows() {
+    const arrowColor = 0xff8866;
+    const arrowRight = new THREE.ArrowHelper(new THREE.Vector3(1,0,0), new THREE.Vector3(1.45,0,0), 0.88, arrowColor, 0.48, 0.34);
+    const arrowLeft = new THREE.ArrowHelper(new THREE.Vector3(-1,0,0), new THREE.Vector3(-1.45,0,0), 0.88, arrowColor, 0.48, 0.34);
+    rodGroup.add(arrowRight);
+    rodGroup.add(arrowLeft);
+    const leftDiv = document.createElement('div'); leftDiv.textContent = '← 拉力 F';
+    leftDiv.style.cssText = 'background:#0f212ecc; color:#ffbc8c; padding:3px 12px; border-radius:32px; font-size:11px; border-left:2px solid #ff9966;';
+    const rightDiv = document.createElement('div'); rightDiv.textContent = '拉力 F →';
+    rightDiv.style.cssText = 'background:#0f212ecc; color:#ffbc8c; padding:3px 12px; border-radius:32px; font-size:11px; border-right:2px solid #ff9966;';
+    const leftLabel = new CSS2DObject(leftDiv);
+    const rightLabel = new CSS2DObject(rightDiv);
+    rodGroup.add(leftLabel);
+    rodGroup.add(rightLabel);
+    return { arrowRight, arrowLeft, leftLabel, rightLabel };
+  }
+  arrowRefs = initArrows();
+  function updateArrowsPos(len) {
+    const half = len / 2;
+    arrowRefs.arrowRight.position.set(half + 0.27, 0, 0);
+    arrowRefs.arrowLeft.position.set(-half - 0.27, 0, 0);
+    arrowRefs.leftLabel.position.set(-half - 0.82, 0.45, 0);
+    arrowRefs.rightLabel.position.set(half + 0.82, 0.45, 0);
+  }
+  
+  // 星空背景
+  const starCount = 1300;
+  const starGeo = new THREE.BufferGeometry();
+  const starPositions = new Float32Array(starCount * 3);
+  for (let i = 0; i < starCount; i++) {
+    starPositions[i*3] = (Math.random() - 0.5) * 450;
+    starPositions[i*3+1] = (Math.random() - 0.5) * 240;
+    starPositions[i*3+2] = (Math.random() - 0.5) * 180 - 80;
+  }
+  starGeo.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+  const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.075, transparent: true, opacity: 0.45 });
+  const stars = new THREE.Points(starGeo, starMat);
+  scene.add(stars);
+  
+  // DOM 元素
+  const forceSlider = document.getElementById('force');
+  const lengthSlider = document.getElementById('length');
+  const areaSlider = document.getElementById('area');
+  const modulusSlider = document.getElementById('modulus');
+  const materialSelect = document.getElementById('materialModel');
+  const forceValSpan = document.getElementById('forceVal');
+  const lengthValSpan = document.getElementById('lengthVal');
+  const areaValSpan = document.getElementById('areaVal');
+  const modulusValSpan = document.getElementById('modulusVal');
+  const deformationSpan = document.getElementById('deformation');
+  const stressSpan = document.getElementById('stress');
+  const strainSpan = document.getElementById('strain');
+  const modelStatusSpan = document.getElementById('modelStatus');
+  
+  let F = 500, L0 = 2.0, A = 0.01;
+  
+  // ECharts 曲线
+  let chart = null;
+  function initChart() {
+    const dom = document.getElementById('stressStrainChart');
+    if (!dom) return;
+    chart = echarts.init(dom);
+    chart.setOption({
+      backgroundColor: 'transparent',
+      grid: { top: 18, left: 42, right: 12, bottom: 12 },
+      tooltip: { trigger: 'axis', backgroundColor: 'rgba(10,20,35,0.9)' },
+      xAxis: { name: '应变 ε (×10⁻⁶)', nameTextStyle: { color: '#bbdef5', fontSize: 9 }, axisLabel: { color: '#9ab8dd', fontSize: 8 }, splitLine: { lineStyle: { color: '#1e3a4e' } } },
+      yAxis: { name: '应力 σ (MPa)', nameTextStyle: { color: '#bbdef5', fontSize: 9 }, axisLabel: { color: '#9ab8dd', fontSize: 8 }, splitLine: { lineStyle: { color: '#1e3a4e' } } },
+      series: [
+        { name: '本构曲线', type: 'line', data: [], lineStyle: { width: 2, color: '#5bc0ff' }, smooth: false, showSymbol: false },
+        { name: '当前工作点', type: 'scatter', data: [], symbolSize: 12, itemStyle: { color: '#ffaa66', borderColor: '#fff' }, label: { show: true, formatter: '● 当前', color: '#ffcc88', fontSize: 9 } }
+      ]
+    });
+  }
+  function updateCurve(strain, stressMPa) {
+    if (!chart) initChart();
+    if (!chart) return;
+    const maxStrain = Math.max(strain * 1.6, 0.0003);
+    const steps = 70;
+    const curvePoints = [];
+    for (let i = 0; i <= steps; i++) {
+      const eps = (maxStrain * i) / steps;
+      const sig = computeStressFromStrain(eps);
+      curvePoints.push([eps * 1e6, sig]);
+    }
+    chart.setOption({
+      series: [
+        { data: curvePoints, type: 'line' },
+        { data: [[strain * 1e6, stressMPa]], type: 'scatter' }
+      ]
+    });
+  }
+  
+  // 核心更新: 求解应变/应力，更新3D颜色+长度
+  function updateAll() {
+    E_GPa = parseFloat(modulusSlider.value);
+    E_Pa = E_GPa * 1e9;
+    F = parseFloat(forceSlider.value);
+    L0 = parseFloat(lengthSlider.value);
+    A = parseFloat(areaSlider.value);
+    materialModel = materialSelect.value;
+    
+    forceValSpan.textContent = F.toFixed(1) + ' N';
+    lengthValSpan.textContent = L0.toFixed(3) + ' m';
+    areaValSpan.textContent = A.toFixed(4) + ' m²';
+    modulusValSpan.textContent = E_GPa.toFixed(1) + ' GPa';
+    
+    const targetStressMPa = F / A / 1e6;   // 名义应力需求
+    let strain = 0, actualStressMPa = 0;
+    if (targetStressMPa <= 0) {
+      strain = 0;
+      actualStressMPa = 0;
+    } else {
+      strain = solveStrainGivenStress(targetStressMPa);
+      actualStressMPa = computeStressFromStrain(strain);
+    }
+    const deltaL = strain * L0;
+    
+    deformationSpan.textContent = deltaL.toFixed(8) + ' m';
+    stressSpan.textContent = actualStressMPa.toFixed(3) + ' MPa';
+    strainSpan.textContent = strain.toExponential(6);
+    
+    let modelMsg = '';
+    if (materialModel === 'elastic') modelMsg = '✅ 线弹性 | 蓝色映射 (低应力)';
+    else if (materialModel === 'perfectPlastic') {
+      const yieldStrainVal = yieldStressMPa / (E_GPa * 1000);
+      modelMsg = strain > yieldStrainVal ? '⚠️ 理想弹塑性 | 屈服平台 → 红色区域' : '🔷 理想弹塑性 | 弹性阶段 → 蓝色/青色';
+    } else {
+      const yieldStrainVal = yieldStressMPa / (E_GPa * 1000);
+      modelMsg = strain > yieldStrainVal ? '📈 双线性强化 | 硬化阶段 → 橙红/红色' : '🔷 双线性强化 | 弹性阶段';
+    }
+    modelStatusSpan.innerHTML = modelMsg;
+    
+    // 更新曲线
+    updateCurve(strain, actualStressMPa);
+    
+    // 3D视觉长度 + 应力颜色映射
+    let visualLen = L0 + deltaL;
+    visualLen = Math.max(visualLen, 0.48);
+    updateRodVisual(visualLen, A, actualStressMPa);
+    updateArrowsPos(visualLen);
+  }
+  
+  // 监听事件
+  forceSlider.addEventListener('input', updateAll);
+  lengthSlider.addEventListener('input', updateAll);
+  areaSlider.addEventListener('input', updateAll);
+  modulusSlider.addEventListener('input', updateAll);
+  materialSelect.addEventListener('change', updateAll);
+  
+  initChart();
+  updateAll();
+  
+  // 动画循环
+  let animTimer = 0;
+  function animate() {
+    requestAnimationFrame(animate);
+    animTimer += 0.007;
+    stars.rotation.y = animTimer * 0.05;
+    stars.rotation.x = Math.sin(animTimer * 0.08) * 0.015;
+    controls.update();
+    renderer.render(scene, camera);
+    labelRenderer.render(scene, camera);
+  }
+  animate();
+  
+  window.addEventListener('resize', () => {
+    const w = container.clientWidth, h = container.clientHeight;
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    renderer.setSize(w, h);
+    labelRenderer.setSize(w, h);
+    if (chart) chart.resize();
+  });
+  
+  // 控制台隐藏/显示
+  const panel = document.getElementById('controlPanel');
+  const toggleBtn = document.getElementById('togglePanelBtn');
+  let panelVisible = true;
+  toggleBtn.addEventListener('click', () => {
+    if (panelVisible) panel.classList.add('hidden');
+    else panel.classList.remove('hidden');
+    panelVisible = !panelVisible;
+    setTimeout(() => { if (chart) chart.resize(); }, 200);
+  });
+  
+  console.log('✅ 动态3D色彩映射已启用 | 应力 → 颜色 (蓝 → 橙红 → 红) | 弹塑性本构耦合');
+</script>
+</body>
+</html>
